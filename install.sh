@@ -9,10 +9,11 @@ ASSETS="$RES/app.asar.unpacked/dist/assets"   # renderer chunks live OUTSIDE app
 
 [ -d "$ASSETS" ] || { echo "no unpacked assets at $ASSETS" >&2; exit 1; }
 # every chunk that carries per-locale dictionaries: the i18n chunk plus feature chunks (kanban, radio, group chat, schedule)
-CHUNKS=$(grep -l -e '"zh-hant":' -e 'configValue:`ja`' "$ASSETS"/*.js)
-[ -n "$CHUNKS" ] || { echo "no locale chunks found" >&2; exit 1; }
+CHUNKS=()   # bash 3.2 (macOS): no mapfile; paths contain spaces
+while IFS= read -r f; do CHUNKS+=("$f"); done < <(grep -l -e '"zh-hant":' -e 'configValue:`ja`' "$ASSETS"/*.js)
+[ ${#CHUNKS[@]} -gt 0 ] || { echo "no locale chunks found" >&2; exit 1; }
 [ -f "$RES/app.asar.orig" ] || cp "$RES/app.asar" "$RES/app.asar.orig"
-for f in $CHUNKS; do
+for f in "${CHUNKS[@]}"; do
   if [ ! -f "$f.orig" ]; then
     if grep -q 'id:`vi`\|,vi:' "$f"; then echo "$f already patched but has no .orig backup" >&2; exit 1; fi
     cp "$f" "$f.orig"   # pristine copy; later runs always rebuild from it
@@ -22,9 +23,9 @@ done
 if pgrep -f "ViberVN Bot.app/Contents/MacOS" >/dev/null; then osascript -e 'tell application "ViberVN Bot" to quit' || true; sleep 3; fi
 
 rm -rf work && mkdir -p work/assets
-for f in $CHUNKS; do cp "$f.orig" "work/assets/$(basename "$f")"; done
+for f in "${CHUNKS[@]}"; do cp "$f.orig" "work/assets/$(basename "$f")"; done
 node build-vi.mjs work/assets
-for f in $CHUNKS; do cp "work/assets/$(basename "$f")" "$f"; done
+for f in "${CHUNKS[@]}"; do cp "work/assets/$(basename "$f")" "$f"; done
 
 I18N=$(ls "$ASSETS"/i18n-*.js)
 grep -q 'id:`vi`' "$I18N" || { echo "patch missing in $I18N" >&2; exit 1; }
