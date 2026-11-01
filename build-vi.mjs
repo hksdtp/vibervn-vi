@@ -1,7 +1,10 @@
-// Usage: node build-vi.mjs <assetsDir>   (patches the i18n chunk in place; always run on a pristine extract)
-// Reads vi.json, writes vi.js (the overlay), injects the `vi` locale: dictionary, registry entry, name map, aliases.
+// Usage: node build-vi.mjs <assetsDir>   (patches chunks in place; run on pristine copies of them)
+// Reads vi.json, writes vi.js (the overlay), injects the `vi` locale into the i18n chunk (dictionary, registry entry, name map, aliases)
+// and into the extra per-locale dictionaries listed in vi.json `extra`.
 import fs from 'node:fs';
+import path from 'node:path';
 import { findChunk } from './load-i18n.mjs';
+import { overlaySource, findDicts } from './lib.mjs';
 
 const dir = process.argv[2] ?? '/tmp/vvn/dist/assets';
 const file = findChunk(dir);
@@ -9,20 +12,7 @@ let src = fs.readFileSync(file, 'utf8');
 if (/\{id:`vi`,name:/.test(src)) throw new Error('chunk already patched; re-extract app.asar.orig first');
 const vi = JSON.parse(fs.readFileSync('vi.json', 'utf8'));
 
-// overlay tree: strings as JSON literals, functions as raw source; numeric path segments make arrays
-const root = {};
-const put = (key, val) => {
-  const p = JSON.parse(key);
-  let o = root;
-  p.forEach((seg, i) => {
-    if (i === p.length - 1) o[seg] = val;
-    else o = o[seg] ??= typeof p[i + 1] === 'number' ? [] : {};
-  });
-};
-for (const [k, v] of Object.entries(vi.strings)) put(k, { lit: JSON.stringify(v) });
-for (const [k, v] of Object.entries(vi.functions)) put(k, { lit: v });
-const ser = (n) => (n.lit !== undefined ? n.lit : Array.isArray(n) ? `[${n.map((x) => (x === undefined ? '' : ser(x))).join(',')}]` : `{${Object.entries(n).map(([k, v]) => `${JSON.stringify(k)}:${ser(v)}`).join(',')}}`);
-const overlay = ser(root);
+const overlay = overlaySource(vi.strings, vi.functions);
 fs.writeFileSync('vi.js', `// Vietnamese overlay (build-vi.mjs output), deep-merged over \`en\` (untranslated keys fall back to English).\nexport default ${overlay};\n`);
 
 const once = (re, fn, what) => {
@@ -40,4 +30,23 @@ once(/\{id:`en`,name:([\w$]+)\.en,[\s\S]*?configValue:`es`\}/, (m) => `${m[0]},{
 // alias map (browser/OS locale strings -> id)
 once(/\{en:`en`,"en-us":`en`/, (m) => `{vi:\`vi\`,"vi-vn":\`vi\`,vi_vn:\`vi\`,vietnamese:\`vi\`,"tiếng việt":\`vi\`,${m[0].slice(1)}`, 'alias map');
 fs.writeFileSync(file, src);
+
+// extra per-locale dictionaries (kanban, radio, group chat, schedule): insert `vi:{...}` right after the `en` property
+const byFile = {};
+for (const key of Object.keys(vi.extra ?? {})) { const i = key.lastIndexOf('/'); (byFile[key.slice(0, i)] ??= []).push(key.slice(i + 1)); }
+for (const [name, dictNames] of Object.entries(byFile)) {
+  const f = path.join(dir, name);
+  const { src: s0, dicts } = findDicts(f);
+  const ins = dictNames.map((dn) => {
+    const d = dicts.find((x) => x.name === dn);
+    if (!d) throw new Error(`dictionary ${dn} not found in ${name}`);
+    if (d.hasVi) throw new Error(`${name}/${dn} already has a vi entry; run on pristine chunks`);
+    const e = vi.extra[`${name}/${dn}`];
+    return [d.enEnd, `,vi:${overlaySource(e.strings, e.functions, e.canonicalRef ? { canonical: `${e.canonicalRef}.vi` } : {})}`];
+  }).sort((a, b) => b[0] - a[0]);
+  let s = s0;
+  for (const [pos, text] of ins) s = s.slice(0, pos) + text + s.slice(pos);
+  fs.writeFileSync(f, s);
+  console.log(`patched ${f}: ${ins.length} dictionaries`);
+}
 console.log(`patched ${file}: overlay ${(overlay.length / 1024) | 0} KB`);

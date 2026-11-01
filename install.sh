@@ -8,19 +8,26 @@ RES="$APP/Contents/Resources"
 ASSETS="$RES/app.asar.unpacked/dist/assets"   # renderer chunks live OUTSIDE app.asar (asar "unpacked"), so no repack is needed
 
 [ -d "$ASSETS" ] || { echo "no unpacked assets at $ASSETS" >&2; exit 1; }
-CHUNK=$(ls "$ASSETS"/i18n-*.js)                 # exactly one expected
+# every chunk that carries per-locale dictionaries: the i18n chunk plus feature chunks (kanban, radio, group chat, schedule)
+CHUNKS=$(grep -l -e '"zh-hant":' -e 'configValue:`ja`' "$ASSETS"/*.js)
+[ -n "$CHUNKS" ] || { echo "no locale chunks found" >&2; exit 1; }
 [ -f "$RES/app.asar.orig" ] || cp "$RES/app.asar" "$RES/app.asar.orig"
-[ -f "$CHUNK.orig" ] || cp "$CHUNK" "$CHUNK.orig"   # pristine chunk (assumes first run was on an unpatched app)
+for f in $CHUNKS; do
+  if [ ! -f "$f.orig" ]; then
+    if grep -q 'id:`vi`\|,vi:' "$f"; then echo "$f already patched but has no .orig backup" >&2; exit 1; fi
+    cp "$f" "$f.orig"   # pristine copy; later runs always rebuild from it
+  fi
+done
 
-osascript -e 'tell application "ViberVN Bot" to quit' 2>/dev/null || true
-sleep 2
+if pgrep -f "ViberVN Bot.app/Contents/MacOS" >/dev/null; then osascript -e 'tell application "ViberVN Bot" to quit' || true; sleep 3; fi
 
 rm -rf work && mkdir -p work/assets
-cp "$CHUNK.orig" "work/assets/$(basename "$CHUNK")"
+for f in $CHUNKS; do cp "$f.orig" "work/assets/$(basename "$f")"; done
 node build-vi.mjs work/assets
-cp "work/assets/$(basename "$CHUNK")" "$CHUNK"
+for f in $CHUNKS; do cp "work/assets/$(basename "$f")" "$f"; done
 
-grep -q 'id:`vi`' "$CHUNK" || { echo "patch missing in $CHUNK" >&2; exit 1; }
+I18N=$(ls "$ASSETS"/i18n-*.js)
+grep -q 'id:`vi`' "$I18N" || { echo "patch missing in $I18N" >&2; exit 1; }
 codesign --force --deep --sign - "$APP"
 open -a "$APP"
-echo "installed. Pick Settings > Language > Tiếng Việt (or run ./set-language.sh)."
+echo "installed. Pick Settings > Language > Tiếng Việt."

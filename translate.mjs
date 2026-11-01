@@ -36,6 +36,10 @@ export function validate(kind, src, out) {
 const units = new Map(); // text -> {kind, hint}
 for (const [k, v] of Object.entries(en.strings)) if (!units.has('s' + v)) units.set('s' + v, { kind: 's', text: v, hint: JSON.parse(k).join('.') });
 for (const [k, v] of Object.entries(en.functions)) if (!units.has('f' + v)) units.set('f' + v, { kind: 'f', text: v, hint: JSON.parse(k).join('.') });
+for (const [dn, d] of Object.entries(en.extra)) {
+  for (const [k, v] of Object.entries(d.strings)) if (!units.has('s' + v)) units.set('s' + v, { kind: 's', text: v, hint: `${dn}:${JSON.parse(k).join('.')}` });
+  for (const [k, v] of Object.entries(d.functions)) if (!units.has('f' + v)) units.set('f' + v, { kind: 'f', text: v, hint: `${dn}:${JSON.parse(k).join('.')}` });
+}
 const translatable = (u) => u.kind === 'f' || /\p{L}/u.test(u.text);
 const todo = [...units.entries()].filter(([ck, u]) => translatable(u) && !(ck in cache));
 console.log(`units=${units.size} cached=${Object.keys(cache).length} todo=${todo.length}`);
@@ -108,13 +112,17 @@ const q = [...batches];
 await Promise.all(Array.from({ length: CONC }, () => worker(q)));
 save();
 
-// ---- assemble vi.json: same keys as en.json; missing/null => left in English ----
-const vi = { strings: {}, functions: {} };
+// ---- assemble vi.json: same keys as en.json; missing => left in English ----
+const vi = { strings: {}, functions: {}, extra: {} };
 let tr = 0, left = 0;
-for (const [kind, map, outMap] of [['s', en.strings, vi.strings], ['f', en.functions, vi.functions]])
-  for (const [k, v] of Object.entries(map)) {
-    const t = cache[kind + v];
-    if (typeof t === 'string') { outMap[k] = t; tr++; } else if (kind === 's' && !/\p{L}/u.test(v)) { /* symbol-only: nothing to translate */ } else left++;
-  }
+const fill = (src, dst) => {
+  for (const [kind, map, outMap] of [['s', src.strings, dst.strings], ['f', src.functions, dst.functions]])
+    for (const [k, v] of Object.entries(map)) {
+      const t = cache[kind + v];
+      if (typeof t === 'string') { outMap[k] = t; tr++; } else if (kind === 's' && !/\p{L}/u.test(v)) { /* symbol-only: nothing to translate */ } else left++;
+    }
+};
+fill(en, vi);
+for (const [dn, d] of Object.entries(en.extra)) fill(d, (vi.extra[dn] = { strings: {}, functions: {}, canonicalRef: d.canonicalRef }));
 fs.writeFileSync('vi.json', JSON.stringify(vi, null, 1));
 console.log(`vi.json: translated leaves=${tr}, left in English=${left}`);
