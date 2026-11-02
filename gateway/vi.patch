@@ -1,3 +1,15 @@
+--- a/gateway/session_controls.py
++++ b/gateway/session_controls.py
+@@ -820,6 +820,9 @@
+                                    'turn_author', 'api_text', 'model_override', 'clarify_batch'}
+         if forbidden:
+             raise RuntimeStoreError('invalid_params')
++        note_at = params['text'].find('\n\n[@mentions resolved from the Bot Mode roster') if isinstance(params.get('text'), str) else -1
++        if note_at > 0 and 'api_text' not in params:
++            params = {**params, 'text': params['text'][:note_at].rstrip(), 'api_text': params['text']}
+         request_id = params.get('submission_id') or params.get('input_id')
+         if not isinstance(request_id, str) or not request_id:
+             raise RuntimeStoreError('invalid_params')
 --- a/agent/onboarding_facts.py
 +++ b/agent/onboarding_facts.py
 @@ -16,6 +16,7 @@

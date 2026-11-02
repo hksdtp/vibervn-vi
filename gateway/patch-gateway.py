@@ -40,12 +40,22 @@ def facts(src):
     src = sub(src, '    from tools.tour_tool import check_tours_enabled\n', '    from agent.i18n import get_language\n    from tools.tour_tool import check_tours_enabled\n')
     return sub(src, 'locale=locale or host["locale"],', 'locale=("vi" if get_language() == "vi" else None) or locale or host["locale"],')
 
-FILES = {"agent/onboarding_facts.py": facts, "agent/onboarding_text.py": text, "agent/onboarding_flow.py": flow}
+def controls(src):
+    # The desktop appends a roster note for the model to every @mention message. Keep the whole text as the model-facing
+    # api_text and persist only what the user typed, so the bubble and the stored row stay clean.
+    return sub(src, "            raise RuntimeStoreError('invalid_params')\n        request_id = params.get('submission_id') or params.get('input_id')\n",
+               "            raise RuntimeStoreError('invalid_params')\n"
+               "        note_at = params['text'].find('\\n\\n[@mentions resolved from the Bot Mode roster') if isinstance(params.get('text'), str) else -1\n"
+               "        if note_at > 0 and 'api_text' not in params:\n"
+               "            params = {**params, 'text': params['text'][:note_at].rstrip(), 'api_text': params['text']}\n"
+               "        request_id = params.get('submission_id') or params.get('input_id')\n")
+
+FILES = {"gateway/session_controls.py": controls, "agent/onboarding_facts.py": facts, "agent/onboarding_text.py": text, "agent/onboarding_flow.py": flow}
 diff = []
 for rel, fn in FILES.items():
     path = f"{ROOT}/{rel}"
     # a file without our marker is pristine (first run or fresh from an app update): it becomes the new .orig
-    if "_VI = {" not in (cur := open(path, encoding="utf-8").read()) and "get_language" not in cur or not os.path.exists(path + ".orig"): shutil.copy(path, path + ".orig")
+    if not os.path.exists(path + ".orig") or not any(m in (cur := open(path, encoding="utf-8").read()) for m in ("_VI = {", "get_language", "[@mentions resolved")): shutil.copy(path, path + ".orig")
     orig = open(path + ".orig", encoding="utf-8").read()
     new = fn(orig)
     open(path, "w", encoding="utf-8").write(new)
