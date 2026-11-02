@@ -22,6 +22,13 @@ done
 
 if pgrep -f "ViberVN Bot.app/Contents/MacOS" >/dev/null; then osascript -e 'tell application "ViberVN Bot" to quit' || true; sleep 3; fi
 
+# gateway (Python payload): onboarding strings patch + t() overlay catalog (~/.vibervnbot/locales/vi.yaml, survives updates)
+GW="$RES/agent-payload/vibervnbot-agent"
+if [ -d "$GW" ]; then
+  python3 gateway/patch-gateway.py "$GW"      # rebuilds touched files from .orig, clears their __pycache__
+  mkdir -p "$HOME/.vibervnbot/locales" && cp gateway/locales-vi.yaml "$HOME/.vibervnbot/locales/vi.yaml"
+fi
+
 rm -rf work && mkdir -p work/assets
 for f in "${CHUNKS[@]}"; do cp "$f.orig" "work/assets/$(basename "$f")"; done
 node build-vi.mjs work/assets

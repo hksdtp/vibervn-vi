@@ -1,0 +1,16 @@
+{
+  "greeting": "Chào bạn, mình là ViberVN Bot. Cùng thiết lập cho bạn nhé. Xong rồi mình sẽ làm điều gì đó hay ho.",
+  "question.name": "Mình nên gọi bạn là gì?",
+  "question.theme": "Chọn một màu nhé.",
+  "question.layout": "Bạn muốn bố cục nào?",
+  "question.connectors": "Bạn muốn mình làm việc với những ứng dụng nào?",
+  "question.plugins": "Bạn có muốn dùng cái nào trong số này không?",
+  "question.tour": "Muốn xem một vòng làm quen trước không?",
+  "question.build": "Bạn đã biết muốn mình làm gì chưa?",
+  "label.Sidebar left": "Thanh bên trái",
+  "label.Sidebar right": "Thanh bên phải",
+  "label.Quick tour": "Xem nhanh",
+  "label.Show me everything": "Xem toàn bộ",
+  "label.Skip, let's build something": "Bỏ qua, bắt tay làm gì đó thôi",
+  "label.Explain how ViberVN Bot works": "Giải thích cách ViberVN Bot hoạt động"
+}

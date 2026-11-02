@@ -1,0 +1,97 @@
+--- a/agent/onboarding_facts.py
++++ b/agent/onboarding_facts.py
+@@ -16,6 +16,7 @@
+     """``locale``: the desktop's UI language, preferred over the backend OS locale for wording."""
+     from vibervnbot_cli.plugin_catalog_presence import onboarding_names
+     from vibervnbot_platform.host.summary import summary
++    from agent.i18n import get_language
+     from tools.tour_tool import check_tours_enabled
+ 
+     host = summary()
+@@ -23,7 +24,7 @@
+     return Facts(
+         os=_OS.get(machine.get("os_family", ""), "linux"), arch=machine.get("native_arch", ""),
+         machine_kind=host["machine_kind"], nvidia_platform=host["nvidia_platform"],
+-        facts_source="remote" if facts_source == "remote" else "local", locale=locale or host["locale"],
++        facts_source="remote" if facts_source == "remote" else "local", locale=("vi" if get_language() == "vi" else None) or locale or host["locale"],
+         plugins=tuple(onboarding_names()), tours=check_tours_enabled())
+ 
+ 
+--- a/agent/onboarding_text.py
++++ b/agent/onboarding_text.py
+@@ -34,6 +34,7 @@
+     "ru": "Привет, я ViberVN Bot. Давайте всё настроим под вас. А потом сделаем что-нибудь классное.",
+     "zh": "你好，我是 ViberVN Bot。我们先帮你把一切设置好，然后一起做点很酷的事。",
+     "zh-hant": "你好，我是 ViberVN Bot。我們先幫你把一切設定好，然後一起做點很酷的事。",
++    "vi": "Chào bạn, mình là ViberVN Bot. Cùng thiết lập cho bạn nhé. Xong rồi mình sẽ làm điều gì đó hay ho.",
+ }
+ 
+ _NAME_QUESTIONS = {
+@@ -65,6 +66,8 @@
+ 
+ def question(beat: str, locale: str | None) -> str:
+     """The card's own question; the name card asks in the user's language."""
++    if ui_language(locale) == "vi":
++        return _QUESTIONS_VI[beat]
+     if beat == "name":
+         return _NAME_QUESTIONS.get(ui_language(locale), QUESTIONS["name"])
+     return QUESTIONS[beat]
+@@ -77,6 +80,16 @@
+     "plugins": "Want any of these?",
+     "tour": "Want a look around first?",
+     "build": "Know what you'd like me to make?",
++}
++
++_QUESTIONS_VI = {
++    "name": "Mình nên gọi bạn là gì?",
++    "theme": "Chọn một màu nhé.",
++    "layout": "Bạn muốn bố cục nào?",
++    "connectors": "Bạn muốn mình làm việc với những ứng dụng nào?",
++    "plugins": "Bạn có muốn dùng cái nào trong số này không?",
++    "tour": "Muốn xem một vòng làm quen trước không?",
++    "build": "Bạn đã biết muốn mình làm gì chưa?",
+ }
+ 
+ _SET_THEME = 'tool_call {"calls":[{"name":"set_theme","arguments":{"accent":"violet"}}]}'
+--- a/agent/onboarding_flow.py
++++ b/agent/onboarding_flow.py
+@@ -22,6 +22,21 @@
+ LAYOUT_OPTIONS = ({"id": "sidebar-left", "label": "Sidebar left"}, {"id": "sidebar-right", "label": "Sidebar right"})
+ TOUR_OPTIONS = ({"id": "quick", "label": "Quick tour"}, {"id": "full", "label": "Show me everything"},
+                 {"id": "skip", "label": "Skip, let's build something"})
++
++# Fixed card labels in the desktop language (display.language / facts.locale); the model words its own.
++_LABELS_VI = {
++    "Sidebar left": "Thanh bên trái",
++    "Sidebar right": "Thanh bên phải",
++    "Quick tour": "Xem nhanh",
++    "Show me everything": "Xem toàn bộ",
++    "Skip, let's build something": "Bỏ qua, bắt tay làm gì đó thôi",
++    "Explain how ViberVN Bot works": "Giải thích cách ViberVN Bot hoạt động",
++}
++
++
++def _localized(options, facts):
++    vi = (facts.locale or "").lower().replace("_", "-").split("-")[0] == "vi"
++    return [{**o, "label": _LABELS_VI.get(o["label"], o["label"])} for o in options] if vi else list(options)
+ 
+ 
+ @dataclass(frozen=True)
+@@ -174,14 +189,14 @@
+ BEATS: tuple[Beat, ...] = (
+     Beat("name", lambda facts, picks: {}, picks=("name",), value="name"),
+     Beat("theme", lambda facts, picks: {"picker": "accent"}, picks=("accent", "mode"), value="accent"),
+-    Beat("layout", lambda facts, picks: {"options": list(LAYOUT_OPTIONS)}, picks=("layout",), value="layout",
++    Beat("layout", lambda facts, picks: {"options": _localized(LAYOUT_OPTIONS, facts)}, picks=("layout",), value="layout",
+          values=lambda facts, picks: _option_ids(LAYOUT_OPTIONS)),
+     Beat("connectors", lambda facts, picks: {}, picks=("connected", "newly_connected")),
+     Beat("plugins", lambda facts, picks: {"plugins": list(facts.plugins[:MAX_PLUGINS])}, picks=("installed",),
+          when=lambda facts, picks: bool(facts.plugins)),
+-    Beat("tour", lambda facts, picks: {"options": list(TOUR_OPTIONS)}, picks=("tour",), value="tour",
++    Beat("tour", lambda facts, picks: {"options": _localized(TOUR_OPTIONS, facts)}, picks=("tour",), value="tour",
+          values=lambda facts, picks: _option_ids(TOUR_OPTIONS), when=lambda facts, picks: facts.tours),
+-    Beat("build", lambda facts, picks: {"options": card_options(picks.get("build_options"))}, picks=("build",),
++    Beat("build", lambda facts, picks: {"options": _localized(card_options(picks.get("build_options")), facts)}, picks=("build",),
+          value="build", values=build_values),
+ )
+ BEAT_BY_ID = {beat.id: beat for beat in BEATS}
