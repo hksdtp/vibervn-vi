@@ -50,12 +50,21 @@ def controls(src):
                "            params = {**params, 'text': params['text'][:note_at].rstrip(), 'api_text': params['text']}\n"
                "        request_id = params.get('submission_id') or params.get('input_id')\n")
 
-FILES = {"gateway/session_controls.py": controls, "agent/onboarding_facts.py": facts, "agent/onboarding_text.py": text, "agent/onboarding_flow.py": flow}
+def dm(src):
+    # message_agent / create_bot were reserved for the one session titled "Bot Chat"; a chat in any other session got
+    # the @mention note but no tool. Gate on the install being Bot-Mode-managed only, drop the title check.
+    src = sub(src, "        return _session_title(agent) == BOT_CHAT_TITLE and is_bot_mode_managed(_agent_home(agent))",
+              "        return is_bot_mode_managed(_agent_home(agent))  # any session may message agents")
+    return sub(src, "        if _session_title(agent) != BOT_CHAT_TITLE:\n"
+                    "            return _err(\"message_agent is only available in a Bot Mode 'Bot Chat' session. \"\n"
+                    "                        \"This session is not one; do not retry.\")\n", "")
+
+FILES = {"tools/bot_mode_dm.py": dm, "gateway/session_controls.py": controls, "agent/onboarding_facts.py": facts, "agent/onboarding_text.py": text, "agent/onboarding_flow.py": flow}
 diff = []
 for rel, fn in FILES.items():
     path = f"{ROOT}/{rel}"
     # a file without our marker is pristine (first run or fresh from an app update): it becomes the new .orig
-    if not os.path.exists(path + ".orig") or not any(m in (cur := open(path, encoding="utf-8").read()) for m in ("_VI = {", "get_language", "[@mentions resolved")): shutil.copy(path, path + ".orig")
+    if not os.path.exists(path + ".orig") or not any(m in (cur := open(path, encoding="utf-8").read()) for m in ("_VI = {", "get_language", "[@mentions resolved", "any session may message agents")): shutil.copy(path, path + ".orig")
     orig = open(path + ".orig", encoding="utf-8").read()
     new = fn(orig)
     open(path, "w", encoding="utf-8").write(new)

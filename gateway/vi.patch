@@ -1,3 +1,24 @@
+--- a/tools/bot_mode_dm.py
++++ b/tools/bot_mode_dm.py
+@@ -131,7 +131,7 @@
+ 
+         # Managed-install check, NOT section non-emptiness: a SOUL.md carrying the
+         # legacy protocol text gets an empty section but must still get the tool.
+-        return _session_title(agent) == BOT_CHAT_TITLE and is_bot_mode_managed(_agent_home(agent))
++        return is_bot_mode_managed(_agent_home(agent))  # any session may message agents
+     except Exception:  # pragma: no cover — must never break a turn
+         logger.debug("message_agent_authorized failed", exc_info=True)
+         return False
+@@ -217,9 +217,6 @@
+         )
+         from tools.bot_relay import _vibervnbot_cli
+ 
+-        if _session_title(agent) != BOT_CHAT_TITLE:
+-            return _err("message_agent is only available in a Bot Mode 'Bot Chat' session. "
+-                        "This session is not one; do not retry.")
+         if not is_bot_mode_managed(home):
+             return _err("This install is not Bot-Mode-managed (no bot roster); "
+                         "message_agent is unavailable. Do not retry.")
 --- a/gateway/session_controls.py
 +++ b/gateway/session_controls.py
 @@ -820,6 +820,9 @@
