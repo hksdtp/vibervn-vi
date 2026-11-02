@@ -32,6 +32,7 @@ fi
 rm -rf work && mkdir -p work/assets
 for f in "${CHUNKS[@]}"; do cp "$f.orig" "work/assets/$(basename "$f")"; done
 node build-vi.mjs work/assets
+node patch-renderer.mjs work/assets
 for f in "${CHUNKS[@]}"; do cp "work/assets/$(basename "$f")" "$f"; done
 
 I18N=$(ls "$ASSETS"/i18n-*.js)
